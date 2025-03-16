@@ -68,6 +68,12 @@ var active_special_draw_effect : bool = false
 var active_post_action_effect : bool = false
 var active_start_of_turn_effects : bool = false
 var active_end_of_turn_effects : bool = false
+var unresolved_effect_stack = {
+	"effects": [],
+	"next_stack": null,
+	"continuation": null,
+	"processing_state": null,
+}
 var remaining_overdrive_effects = []
 var remaining_character_action_effects = []
 var remaining_start_of_turn_effects = []
@@ -9043,6 +9049,28 @@ func do_remaining_effects(performing_player : Player, next_state):
 			active_strike.extra_attack_data.extra_attack_state = next_state
 		else:
 			active_strike.strike_state = next_state
+
+func process_unresolved_effect_stack(performing_player : Player):
+	change_game_state(unresolved_effect_stack["processing_state"])
+	while unresolved_effect_stack["effects"].size() > 0:
+		var effect = unresolved_effect_stack["effects"][0]
+		unresolved_effect_stack["effects"].erase(effect)
+		var card_id = -1
+		if 'card_id' in effect:
+			card_id = effect['card_id']
+		do_effect_if_condition_met(performing_player, card_id, effect, null)
+		if game_state == Enums.GameState.GameState_PlayerDecision:
+			# Player has a decision to make, so stop mid-effect resolve.
+			break
+
+	if game_state != Enums.GameState.GameState_PlayerDecision:
+		# Finished all current effects.
+		if unresolved_effect_stack["next_stack"]:
+			unresolved_effect_stack = unresolved_effect_stack["next_stack"]
+			process_unresolved_effect_stack(performing_player)
+		else:
+			# No more effects to process, so call the continuation.
+			unresolved_effect_stack["continuation"].call()
 
 func do_remaining_overdrive(performing_player : Player):
 	change_game_state(Enums.GameState.GameState_Boost_Processing)
